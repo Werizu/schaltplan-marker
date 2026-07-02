@@ -21,13 +21,13 @@ from __future__ import annotations
 import argparse, json, math, sys, collections
 from pathlib import Path
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # GitHub-Repo für Update-Prüfung (nur lesende HTTPS-Zugriffe, kein pip nötig).
 GITHUB_REPO = "Werizu/schaltplan-marker"
 UPDATE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 UPDATE_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/"
-UPDATE_FILES = ["schaltplan_marker.py", "plan_vergleich.py"]   # Auto-Update holt beide
+UPDATE_FILES = ["schaltplan_marker.py", "plan_vergleich.py", "punkt_marker.py"]   # Auto-Update holt alle
 
 # UTF-8-Ausgabe erzwingen, damit Umlaute auch in der Windows-Konsole (cp1252) funktionieren.
 try:
@@ -407,73 +407,103 @@ def run_gui():
         return
 
     root = tk.Tk()
-    root.title(f"Schaltplan-Marker  v{__version__}")
-    root.geometry("620x520")
-    container = ttk.Frame(root)
-    container.pack(fill="both", expand=True)
-
-    def clear():
-        for w in container.winfo_children():
-            w.destroy()
+    root.title(f"Schaltplan-Marker {__version__}")
+    root.geometry("660x560")
+    root.minsize(560, 480)
 
     def check_updates(manual):
         def worker():
             latest = latest_release_version()
+
             def show():
                 if latest is None:
                     if manual:
                         messagebox.showwarning("Update", "Keine Verbindung zu GitHub (Proxy/Firewall?).")
                 elif _is_newer(latest, __version__):
                     if messagebox.askyesno("Update",
-                            f"Neue Version {latest} verfügbar (installiert: v{__version__}).\n\nJetzt aktualisieren?"):
+                            f"Neue Version {latest} verfügbar (installiert: {__version__}).\n\nJetzt aktualisieren?"):
                         ok, msg = apply_update()
                         (messagebox.showinfo if ok else messagebox.showerror)("Update", msg)
                 elif manual:
-                    messagebox.showinfo("Update", f"Du hast bereits die neueste Version (v{__version__}).")
+                    messagebox.showinfo("Update", f"Aktuellste Version ist installiert ({__version__}).")
             root.after(0, show)
         threading.Thread(target=worker, daemon=True).start()
 
-    # ---- Startbildschirm ---------------------------------------------------
-    def show_home():
-        clear()
-        ttk.Label(container, text="Was möchtest du tun?", font=("", 15)).pack(pady=(50, 25))
-        ttk.Button(container, text="🔵   Plan markieren", command=show_mark).pack(padx=60, pady=8, ipady=12, fill="x")
-        ttk.Button(container, text="🔍   Pläne vergleichen", command=show_compare).pack(padx=60, pady=8, ipady=12, fill="x")
-        ttk.Button(container, text="Nach Updates suchen", command=lambda: check_updates(True)).pack(side="bottom", pady=6)
-        ttk.Label(container, text=f"v{__version__}", foreground="#888").pack(side="bottom")
+    # Kopfzeile
+    header = ttk.Frame(root, padding=(14, 10))
+    header.pack(fill="x")
+    ttk.Label(header, text="Schaltplan-Marker", font=("", 16, "bold")).pack(side="left")
+    ttk.Label(header, text=f"  {__version__}", foreground="#777").pack(side="left")
+    ttk.Button(header, text="Nach Updates suchen", command=lambda: check_updates(True)).pack(side="right")
+    ttk.Separator(root).pack(fill="x")
 
-    # ---- Ansicht: Markieren ------------------------------------------------
-    def show_mark():
-        clear()
-        ttk.Button(container, text="← Zurück", command=show_home).pack(anchor="w", padx=8, pady=6)
-        want_list = tk.BooleanVar(value=True)
-        two_colors = tk.BooleanVar(value=False)
+    nb = ttk.Notebook(root)
+    nb.pack(fill="both", expand=True, padx=10, pady=10)
+    tab_mark = ttk.Frame(nb, padding=12)
+    tab_cmp = ttk.Frame(nb, padding=12)
+    nb.add(tab_mark, text="   Markieren   ")
+    nb.add(tab_cmp, text="   Vergleichen   ")
+
+    # ------------------------------------------------------------------ Markieren
+    def build_mark(parent):
+        try:
+            import punkt_marker as pm
+        except Exception:
+            ttk.Label(parent, justify="left", text=(
+                "Die Datei 'punkt_marker.py' fehlt in dieser Installation.\n"
+                "Bitte die neueste Version als ZIP von GitHub laden.")).pack(anchor="w")
+            return
+
         last_dir = {"path": None}
-        status = tk.Text(container, height=11, wrap="word")
+        p1 = tk.BooleanVar(value=True); p2 = tk.BooleanVar(value=True)
+        t_end = tk.BooleanVar(value=True); t_dur = tk.BooleanVar(value=False); t_abz = tk.BooleanVar(value=False)
+
+        sel_box = ttk.LabelFrame(parent, text="Welche Stromkästen markieren?", padding=10)
+        sel_box.pack(fill="x")
+        r1 = ttk.Frame(sel_box); r1.pack(fill="x", pady=2)
+        ttk.Label(r1, text="Anzahl Punkte", width=16).pack(side="left")
+        ttk.Checkbutton(r1, text="1 Punkt", variable=p1).pack(side="left", padx=6)
+        ttk.Checkbutton(r1, text="2 Punkte", variable=p2).pack(side="left", padx=6)
+        r2 = ttk.Frame(sel_box); r2.pack(fill="x", pady=2)
+        ttk.Label(r2, text="Kabelführung", width=16).pack(side="left")
+        ttk.Checkbutton(r2, text="Ende", variable=t_end).pack(side="left", padx=6)
+        ttk.Checkbutton(r2, text="fortlaufend", variable=t_dur).pack(side="left", padx=6)
+        ttk.Checkbutton(r2, text="Abzweig", variable=t_abz).pack(side="left", padx=6)
+
+        status = tk.Text(parent, height=8, wrap="word", relief="solid", borderwidth=1)
 
         def log(msg):
             status.insert("end", msg + "\n"); status.see("end"); root.update_idletasks()
 
+        def selection():
+            punkte = [n for n, v in ((1, p1), (2, p2)) if v.get()]
+            topos = [t for t, v in (("Ende", t_end), ("durch", t_dur), ("Abzweig", t_abz)) if v.get()]
+            return {(p, t) for p in punkte for t in topos}
+
         def run_on(pdfs):
             pdfs = list(pdfs)
-            if not pdfs:
+            sel = selection()
+            if not pdfs or not sel:
+                messagebox.showwarning("Auswahl fehlt", "Bitte PDF(s) wählen und mindestens eine Kombination ankreuzen.")
                 return
-            files_btn.configure(state="disabled"); folder_btn.configure(state="disabled")
+            for b in (btn_file, btn_folder):
+                b.configure(state="disabled")
             open_btn.configure(state="disabled")
 
             def worker():
                 for pdf in pdfs:
-                    root.after(0, log, f"Verarbeite {Path(pdf).name} …")
+                    root.after(0, log, f"{Path(pdf).name} …")
                     try:
-                        res = process(pdf, two_colors=two_colors.get(), want_list=want_list.get())
-                        root.after(0, log, f"   →  {res['total']} Kästen ✓")
-                        root.after(0, last_dir.__setitem__, "path", res["dir"].parent)
+                        res = pm.mark_by_type(pdf, sel)
+                        root.after(0, log, f"    {res['total']} Kästen markiert")
+                        root.after(0, last_dir.__setitem__, "path", res["dir"])
                     except Exception as e:
-                        root.after(0, log, f"   →  FEHLER: {e}")
+                        root.after(0, log, f"    Fehler: {e}")
 
                 def done():
                     log("Fertig.")
-                    files_btn.configure(state="normal"); folder_btn.configure(state="normal")
+                    for b in (btn_file, btn_folder):
+                        b.configure(state="normal")
                     if last_dir["path"]:
                         open_btn.configure(state="normal")
                 root.after(0, done)
@@ -487,77 +517,91 @@ def run_gui():
             if folder:
                 run_on(_collect_pdfs(folder))
 
-        files_btn = ttk.Button(container, text="📄  Einzelne PDF(s) auswählen…", command=choose_files)
-        files_btn.pack(fill="x", padx=12, pady=(6, 4))
-        folder_btn = ttk.Button(container, text="📁  Ganzen Ordner verarbeiten…", command=choose_folder)
-        folder_btn.pack(fill="x", padx=12, pady=4)
-        ttk.Checkbutton(container, text="Fundliste (CSV für Excel) erzeugen", variable=want_list).pack(anchor="w", padx=12)
-        ttk.Checkbutton(container, text="Fall A / B in zwei Farben (A = rot, B = blau)", variable=two_colors).pack(anchor="w", padx=12, pady=(0, 8))
-        status.pack(fill="both", expand=True, padx=12, pady=4)
-        open_btn = ttk.Button(container, text="Ausgabeordner öffnen", state="disabled",
+        btns = ttk.Frame(parent); btns.pack(fill="x", pady=(12, 6))
+        btn_file = ttk.Button(btns, text="PDF(s) wählen und markieren", command=choose_files)
+        btn_file.pack(side="left")
+        btn_folder = ttk.Button(btns, text="Ganzer Ordner …", command=choose_folder)
+        btn_folder.pack(side="left", padx=8)
+        status.pack(fill="both", expand=True, pady=6)
+        open_btn = ttk.Button(parent, text="Ausgabeordner öffnen", state="disabled",
                               command=lambda: last_dir["path"] and _open_folder(last_dir["path"]))
-        open_btn.pack(fill="x", padx=12, pady=(4, 12))
-        log(f"Bereit. Ausgabe in Downloads/Schaltplan-Marker/<PDF>/")
+        open_btn.pack(fill="x")
+        log("Kreist die gewählten Stromkasten-Typen ein. Ausgabe in Downloads/Schaltplan-Marker/.")
 
-    # ---- Ansicht: Vergleichen ----------------------------------------------
-    def show_compare():
-        clear()
-        ttk.Button(container, text="← Zurück", command=show_home).pack(anchor="w", padx=8, pady=6)
+    # ---------------------------------------------------------------- Vergleichen
+    def build_compare(parent):
         try:
             import plan_vergleich as pv
         except Exception:
-            ttk.Label(container, justify="left", padding=20, text=(
-                "Der Plan-Vergleich braucht die Datei 'plan_vergleich.py',\n"
-                "die in dieser Installation fehlt.\n\n"
-                "Bitte die neueste Version als ZIP von GitHub laden\n"
-                "(Releases-Seite) und den Ordner ersetzen.")).pack()
+            ttk.Label(parent, justify="left", text=(
+                "Die Datei 'plan_vergleich.py' fehlt in dieser Installation.\n"
+                "Bitte die neueste Version als ZIP von GitHub laden.")).pack(anchor="w")
             return
+
         detail = {"paths": []}
         overview = {"path": None}
         last_dir = {"path": None}
+        detail_lbl = tk.StringVar(value="keine Auswahl")
+        overview_lbl = tk.StringVar(value="keine Auswahl")
 
-        detail_lbl = tk.StringVar(value="Detailplan(e): –")
-        overview_lbl = tk.StringVar(value="Übersicht: –")
-        status = tk.Text(container, height=9, wrap="word")
-
-        def log(msg):
-            status.insert("end", msg + "\n"); status.see("end"); root.update_idletasks()
+        src = ttk.LabelFrame(parent, text="Dateien", padding=10)
+        src.pack(fill="x")
 
         def pick_detail_files():
             fs = filedialog.askopenfilenames(title="Detailplan(e) wählen", filetypes=[("PDF", "*.pdf")])
             if fs:
-                detail["paths"] = list(fs)
-                detail_lbl.set(f"Detailplan(e): {len(fs)} Datei(en)")
+                detail["paths"] = list(fs); detail_lbl.set(f"{len(fs)} Datei(en)")
 
         def pick_detail_folder():
             folder = filedialog.askdirectory(title="Ordner mit Detailplänen wählen")
             if folder:
                 detail["paths"] = [str(p) for p in _collect_pdfs(folder)]
-                detail_lbl.set(f"Detailplan(e): ganzer Ordner ({len(detail['paths'])})")
+                detail_lbl.set(f"Ordner ({len(detail['paths'])} PDFs)")
 
         def pick_overview():
             f = filedialog.askopenfilename(title="Übersichts-PDF wählen", filetypes=[("PDF", "*.pdf")])
             if f:
-                overview["path"] = f
-                overview_lbl.set(f"Übersicht: {Path(f).name}")
+                overview["path"] = f; overview_lbl.set(Path(f).name)
+
+        d = ttk.Frame(src); d.pack(fill="x", pady=2)
+        ttk.Label(d, text="Detailplan(e)", width=14).pack(side="left")
+        ttk.Button(d, text="Einzeln …", command=pick_detail_files).pack(side="left")
+        ttk.Button(d, text="Ordner …", command=pick_detail_folder).pack(side="left", padx=4)
+        ttk.Label(d, textvariable=detail_lbl, foreground="#555").pack(side="left", padx=8)
+        o = ttk.Frame(src); o.pack(fill="x", pady=2)
+        ttk.Label(o, text="Übersicht", width=14).pack(side="left")
+        ttk.Button(o, text="Wählen …", command=pick_overview).pack(side="left")
+        ttk.Label(o, textvariable=overview_lbl, foreground="#555").pack(side="left", padx=8)
+
+        chk = ttk.LabelFrame(parent, text="Was prüfen?", padding=10)
+        chk.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(chk, text="Fehlende / zusätzliche Stationen", variable=tk.BooleanVar(value=True),
+                        state="disabled").pack(anchor="w")
+        for t in ("Attribute (Kabel, Trafo)", "Symbol-Art", "Verbindungen (Topologie)"):
+            ttk.Checkbutton(chk, text=f"{t}  –  folgt", state="disabled").pack(anchor="w")
+
+        status = tk.Text(parent, height=7, wrap="word", relief="solid", borderwidth=1)
+
+        def log(msg):
+            status.insert("end", msg + "\n"); status.see("end"); root.update_idletasks()
 
         def start():
             if not detail["paths"] or not overview["path"]:
-                messagebox.showwarning("Fehlt", "Bitte Detailplan(e) UND die Übersichts-PDF wählen.")
+                messagebox.showwarning("Auswahl fehlt", "Bitte Detailplan(e) und die Übersichts-PDF wählen.")
                 return
             start_btn.configure(state="disabled"); open_btn.configure(state="disabled")
 
             def worker():
                 root.after(0, log, "Übersicht einlesen …")
-                names = pv.station_names(overview["path"])   # nur EINMAL
+                names = pv.station_names(overview["path"])
                 for pdf in detail["paths"]:
-                    root.after(0, log, f"Vergleiche {Path(pdf).name} …")
+                    root.after(0, log, f"{Path(pdf).name} …")
                     try:
                         res = pv.run_comparison(pdf, overview_names=names)
-                        root.after(0, log, f"   →  {res['unbekannt']} unbekannte Stationen (von {res['gesamt']}) markiert ✓")
+                        root.after(0, log, f"    {res['unbekannt']} unbekannte von {res['gesamt']} Stationen")
                         root.after(0, last_dir.__setitem__, "path", res["dir"].parent)
                     except Exception as e:
-                        root.after(0, log, f"   →  FEHLER: {e}")
+                        root.after(0, log, f"    Fehler: {e}")
 
                 def done():
                     log("Fertig.")
@@ -567,28 +611,15 @@ def run_gui():
                 root.after(0, done)
             threading.Thread(target=worker, daemon=True).start()
 
-        ttk.Label(container, text="Detailplan  ⟷  Übersicht vergleichen", font=("", 12, "bold")).pack(anchor="w", padx=12)
-        ttk.Label(container, textvariable=detail_lbl).pack(anchor="w", padx=12, pady=(6, 0))
-        row = ttk.Frame(container); row.pack(fill="x", padx=12)
-        ttk.Button(row, text="Einzelne(n) wählen…", command=pick_detail_files).pack(side="left", pady=2)
-        ttk.Button(row, text="Ganzen Ordner…", command=pick_detail_folder).pack(side="left", padx=6)
-        ttk.Label(container, textvariable=overview_lbl).pack(anchor="w", padx=12, pady=(8, 0))
-        ttk.Button(container, text="Übersichts-PDF wählen…", command=pick_overview).pack(anchor="w", padx=12, pady=2)
-
-        ttk.Label(container, text="Was soll geprüft werden?").pack(anchor="w", padx=12, pady=(10, 0))
-        ttk.Checkbutton(container, text="Fehlende / zusätzliche Stationen", variable=tk.BooleanVar(value=True),
-                        state="disabled").pack(anchor="w", padx=24)
-        for t in ("Attribute (Kabel, Trafo)", "Symbol-Art", "Verbindungen (Topologie)"):
-            ttk.Checkbutton(container, text=f"{t}   (kommt später)", state="disabled").pack(anchor="w", padx=24)
-
-        start_btn = ttk.Button(container, text="Vergleich starten", command=start)
-        start_btn.pack(fill="x", padx=12, pady=(10, 4))
-        status.pack(fill="both", expand=True, padx=12, pady=4)
-        open_btn = ttk.Button(container, text="Ergebnis öffnen", state="disabled",
+        start_btn = ttk.Button(parent, text="Vergleich starten", command=start)
+        start_btn.pack(fill="x", pady=(12, 6))
+        status.pack(fill="both", expand=True, pady=4)
+        open_btn = ttk.Button(parent, text="Ergebnis öffnen", state="disabled",
                               command=lambda: last_dir["path"] and _open_folder(last_dir["path"]))
-        open_btn.pack(fill="x", padx=12, pady=(4, 12))
+        open_btn.pack(fill="x")
 
-    show_home()
+    build_mark(tab_mark)
+    build_compare(tab_cmp)
     root.after(600, lambda: check_updates(manual=False))
     root.mainloop()
 
