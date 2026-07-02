@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Ein-/Ausgabe-PDFs & Ergebnisse (nicht versionieren)
+*_markiert.pdf
+*.fundliste.csv
+*.pdf
+
+# gebauter Verteil-Ordner
+Export/
+
+# macOS
+.DS_Store
+
+# Release-Pakete
+*.zip

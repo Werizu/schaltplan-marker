@@ -1,0 +1,8 @@
+Schaltplan-Marker
+=================
+Doppelklick auf "Schaltplan-Marker starten.pyw".
+Im Fenster: PDF(s) oder einen Ordner waehlen.
+Ergebnis erscheint in:  Downloads\Schaltplan-Marker\<PDF-Name>\
+  - <PDF-Name>_markiert.pdf     (Plan mit roten Kreisen)
+  - <PDF-Name>_fundliste.csv    (Liste, oeffnet in Excel)
+Kein Internet, keine Installation noetig.
