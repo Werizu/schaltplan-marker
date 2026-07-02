@@ -12,7 +12,8 @@ schieben, ohne das grosse PyMuPDF erneut zu entpacken.
 import sys, shutil, zipfile
 from pathlib import Path
 
-SCRIPTS = ["schaltplan_marker.py", "Schaltplan-Marker starten.pyw", "LIESMICH.txt"]
+SCRIPTS = ["schaltplan_marker.py", "plan_vergleich.py",
+           "Schaltplan-Marker starten.pyw", "LIESMICH.txt"]
 
 
 def export_dir(root: Path) -> Path:

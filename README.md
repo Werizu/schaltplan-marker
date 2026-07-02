@@ -26,6 +26,25 @@ Markiert werden Stromkästen in zwei Fällen (roter Kreis um den Kasten):
 - **Fall A** – am Kasten liegt eine **Abzweig-Raute** an (≥ 2 Linienrichtungen laufen zusammen, T-/Kreuzungspunkt).
 - **Fall B** – die Linie wird **kurz vor dem Kasten dicker** (ein- oder beidseitig).
 
+## Zwei Werkzeuge unter einem Dach
+
+Beim Start (Doppelklick / ohne Argument) erscheint ein **Startbildschirm** mit zwei Wegen:
+
+- **🔵 Plan markieren** – Stromkästen (Fall A/B) im Plan einkreisen (siehe oben).
+- **🔍 Pläne vergleichen** – einen **Detailplan** (z. B. eines Kreises/Ortes) gegen die große
+  **Übersichts-PDF** abgleichen und Abweichungen finden.
+
+### Pläne vergleichen (Phase 1: Stationen)
+Detailplan(e) + Übersichts-PDF wählen → **Vergleich starten**. Das Tool matcht die **Stationsnamen**
+(normalisiert: ß→ss, Umlaute, Präfixe wie AZ/MS) und markiert im Detailplan die Stationen, die es in der
+Übersicht **nicht** findet – plus ein CSV-Bericht. Einzeln oder als **ganzer Ordner** (Batch; die
+Übersicht wird dabei nur einmal eingelesen).
+
+Ausgabe: `Downloads/Schaltplan-Marker/Vergleich/<Detailplan>/` (`…_geprueft.pdf` + `…_abweichungen.csv`).
+
+> **Prüf-Assistent, kein Richter:** Die Extraktion trifft nicht 100 %; die Treffer sind Vorschläge zum
+> Nachsehen. Attribute / Symbol-Art / Topologie folgen in späteren Phasen.
+
 ## Installation
 
 Voraussetzung: **Python 3.9+**.
