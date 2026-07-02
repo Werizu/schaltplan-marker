@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse, json, math, sys, collections
 from pathlib import Path
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 # GitHub-Repo für Update-Prüfung (nur lesende HTTPS-Zugriffe, kein pip nötig).
 GITHUB_REPO = "Werizu/schaltplan-marker"
@@ -370,14 +370,29 @@ def latest_release_version(timeout=15):
         return None
 
 
+def _update_file_list(timeout=15):
+    """Holt die aktuelle Dateiliste aus manifest.json auf GitHub (damit auch NEUE
+    Dateien automatisch mitkommen). Fällt auf UPDATE_FILES zurück, wenn nicht erreichbar."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(UPDATE_RAW_BASE + "manifest.json", headers={"User-Agent": "Schaltplan-Marker"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            files = json.loads(r.read()).get("files")
+        if isinstance(files, list) and files:
+            return files
+    except Exception:
+        pass
+    return UPDATE_FILES
+
+
 def apply_update(timeout=30):
-    """Lädt die neuesten Programmdateien (UPDATE_FILES) und ersetzt sie. Gibt (ok, meldung)."""
+    """Lädt alle im Manifest gelisteten Programmdateien und ersetzt sie. Gibt (ok, meldung)."""
     import urllib.request, os, tempfile
     folder = Path(__file__).resolve().parent
     try:
         # erst alles herunterladen + prüfen, dann erst schreiben (kein halber Stand)
         payloads = {}
-        for fn in UPDATE_FILES:
+        for fn in _update_file_list():
             req = urllib.request.Request(UPDATE_RAW_BASE + fn, headers={"User-Agent": "Schaltplan-Marker"})
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 data = r.read()
@@ -442,7 +457,7 @@ def run_gui():
     tab_mark = ttk.Frame(nb, padding=12)
     tab_cmp = ttk.Frame(nb, padding=12)
     nb.add(tab_mark, text="   Markieren   ")
-    nb.add(tab_cmp, text="   Vergleichen   ")
+    nb.add(tab_cmp, text="   Vergleichen (N.O)   ")
 
     # ------------------------------------------------------------------ Markieren
     def build_mark(parent):
