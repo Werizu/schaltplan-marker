@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse, json, math, sys, collections
 from pathlib import Path
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 # GitHub-Repo für Update-Prüfung (nur lesende HTTPS-Zugriffe, kein pip nötig).
 GITHUB_REPO = "Werizu/schaltplan-marker"
@@ -483,6 +483,7 @@ def run_gui():
     ttk.Button(root, text="Nach Updates suchen",
                command=lambda: check_updates(manual=True)).pack(fill="x", padx=12, pady=(0, 12))
 
+    log(f"Schaltplan-Marker v{__version__} – bereit.")
     root.after(600, lambda: check_updates(manual=False))   # stille Prüfung kurz nach Start
     root.mainloop()
 
