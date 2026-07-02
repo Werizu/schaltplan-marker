@@ -21,6 +21,13 @@ from __future__ import annotations
 import argparse, json, math, sys, collections
 from pathlib import Path
 
+__version__ = "1.1.0"
+
+# GitHub-Repo für Update-Prüfung (nur lesende HTTPS-Zugriffe, kein pip nötig).
+GITHUB_REPO = "Werizu/schaltplan-marker"
+UPDATE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+UPDATE_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/schaltplan_marker.py"
+
 # UTF-8-Ausgabe erzwingen, damit Umlaute auch in der Windows-Konsole (cp1252) funktionieren.
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -337,11 +344,55 @@ def _open_folder(path):
         subprocess.run(["xdg-open", str(path)])
 
 
+def _parse_version(v):
+    """'v1.2.3' / '1.2.3' -> (1, 2, 3); nicht-numerische Teile werden zu 0."""
+    nums = []
+    for part in str(v).lstrip("vV").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        nums.append(int(digits) if digits else 0)
+    return tuple(nums)
+
+
+def _is_newer(remote, local):
+    """True, wenn remote eine höhere Version als local ist."""
+    return _parse_version(remote) > _parse_version(local)
+
+
+def latest_release_version(timeout=15):
+    """Neueste Release-Version auf GitHub abfragen. Tag-String oder None (bei Fehler/kein Netz)."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(UPDATE_API, headers={"User-Agent": "Schaltplan-Marker"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read()).get("tag_name")
+    except Exception:
+        return None
+
+
+def apply_update(timeout=30):
+    """Lädt die neueste schaltplan_marker.py und ersetzt diese Datei. Gibt (ok, meldung)."""
+    import urllib.request, os, tempfile
+    try:
+        req = urllib.request.Request(UPDATE_RAW, headers={"User-Agent": "Schaltplan-Marker"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = r.read()
+        if b"__version__" not in data or len(data) < 500:
+            return False, "Heruntergeladene Datei sieht ungültig aus – Update abgebrochen."
+        target = Path(__file__).resolve()
+        fd, tmp = tempfile.mkstemp(dir=str(target.parent), suffix=".py")
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, target)   # atomarer Austausch
+        return True, "Update installiert. Bitte das Programm neu starten."
+    except Exception as e:
+        return False, f"Update fehlgeschlagen: {type(e).__name__}: {e}"
+
+
 def run_gui():
     import threading
     try:
         import tkinter as tk
-        from tkinter import filedialog, ttk
+        from tkinter import filedialog, ttk, messagebox
     except Exception:
         print("Grafische Oberfläche (tkinter) nicht verfügbar.")
         print("Nutzung per Kommandozeile: python schaltplan_marker.py plan.pdf --list")
@@ -349,8 +400,8 @@ def run_gui():
         return
 
     root = tk.Tk()
-    root.title("Schaltplan-Marker")
-    root.geometry("560x420")
+    root.title(f"Schaltplan-Marker  v{__version__}")
+    root.geometry("560x460")
     want_list = tk.BooleanVar(value=True)
     two_colors = tk.BooleanVar(value=False)
     last_dir = {"path": None}
@@ -358,6 +409,24 @@ def run_gui():
     status = tk.Text(root, height=12, wrap="word")
     def log(msg):
         status.insert("end", msg + "\n"); status.see("end"); root.update_idletasks()
+
+    def check_updates(manual):
+        # Prüft im Hintergrund auf eine neuere GitHub-Release-Version.
+        def worker():
+            latest = latest_release_version()
+            def show():
+                if latest is None:
+                    if manual:
+                        messagebox.showwarning("Update", "Keine Verbindung zu GitHub (Proxy/Firewall?).")
+                elif _is_newer(latest, __version__):
+                    if messagebox.askyesno("Update",
+                            f"Neue Version {latest} verfügbar (installiert: v{__version__}).\n\nJetzt aktualisieren?"):
+                        ok, msg = apply_update()
+                        (messagebox.showinfo if ok else messagebox.showerror)("Update", msg)
+                elif manual:
+                    messagebox.showinfo("Update", f"Du hast bereits die neueste Version (v{__version__}).")
+            root.after(0, show)
+        threading.Thread(target=worker, daemon=True).start()
 
     def set_buttons(state):
         files_btn.configure(state=state)
@@ -410,7 +479,11 @@ def run_gui():
     status.pack(fill="both", expand=True, padx=12, pady=4)
     open_btn = ttk.Button(root, text="Ausgabeordner öffnen", state="disabled",
                           command=lambda: last_dir["path"] and _open_folder(last_dir["path"]))
-    open_btn.pack(fill="x", padx=12, pady=(4, 12))
+    open_btn.pack(fill="x", padx=12, pady=(4, 4))
+    ttk.Button(root, text="Nach Updates suchen",
+               command=lambda: check_updates(manual=True)).pack(fill="x", padx=12, pady=(0, 12))
+
+    root.after(600, lambda: check_updates(manual=False))   # stille Prüfung kurz nach Start
     root.mainloop()
 
 

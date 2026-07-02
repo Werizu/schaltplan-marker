@@ -91,6 +91,16 @@ python werkzeuge/bundle_windows.py        # ohne Argument = nur Code aktualisier
 ```
 Der `Export/`-Ordner ist die feste Arbeitsversion (bewusst nicht in Git, da große Binärdateien).
 
+## Automatische Updates
+
+Das Tool prüft beim Start (und per Knopf **„Nach Updates suchen"**) auf eine neuere
+GitHub-Release-Version und bietet an, sich selbst zu aktualisieren – es lädt dann nur die
+kleine Code-Datei `schaltplan_marker.py` (kein `pip`, PyMuPDF bleibt liegen). Schlägt die
+Prüfung fehl (z. B. Proxy/Firewall), läuft das Tool normal weiter.
+
+Neue Version veröffentlichen: `__version__` in `schaltplan_marker.py` erhöhen, nach `main`
+pushen und ein **GitHub-Release** mit passendem Tag (z. B. `v1.2.0`) anlegen.
+
 > Das passende PyMuPDF-Wheel (abi3, `win_amd64`) gibt es auf PyPI; ein abi3-Wheel läuft über alle
 > Python-Versionen ab seiner Mindestversion (z. B. `cp310-abi3` → Python 3.10+).
 

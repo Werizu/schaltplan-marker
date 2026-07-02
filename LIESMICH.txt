@@ -6,3 +6,7 @@ Ergebnis erscheint in:  Downloads\Schaltplan-Marker\<PDF-Name>\
   - <PDF-Name>_markiert.pdf     (Plan mit roten Kreisen)
   - <PDF-Name>_fundliste.csv    (Liste, oeffnet in Excel)
 Kein Internet, keine Installation noetig.
+
+Updates: Das Programm prueft beim Start automatisch auf eine neue Version
+und bietet sie an. Oder Knopf "Nach Updates suchen" im Fenster.
+(Braucht nur Internet-Zugriff, kein pip.)
